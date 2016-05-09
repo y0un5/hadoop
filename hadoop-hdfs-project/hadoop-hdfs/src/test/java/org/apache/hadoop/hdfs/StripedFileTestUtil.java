@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.client.impl.BlockReaderTestUtil;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.namenode.ErasureCodingPolicyManager;
 import org.apache.hadoop.hdfs.util.StripedBlockUtil;
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem.WebHdfsInputStream;
+import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.erasurecode.CodecUtil;
 import org.apache.hadoop.io.erasurecode.rawcoder.RawErasureEncoder;
 import org.junit.Assert;
@@ -83,16 +85,6 @@ public class StripedFileTestUtil {
   static byte getByte(long pos) {
     final int mod = 29;
     return (byte) (pos % mod + 1);
-  }
-
-  static int readAll(FSDataInputStream in, byte[] buf) throws IOException {
-    int readLen = 0;
-    int ret;
-    while ((ret = in.read(buf, readLen, buf.length - readLen)) >= 0 &&
-        readLen <= buf.length) {
-      readLen += ret;
-    }
-    return readLen;
   }
 
   static void verifyLength(FileSystem fs, Path srcPath, int fileLength)
@@ -214,11 +206,11 @@ public class StripedFileTestUtil {
   static void assertSeekAndRead(FSDataInputStream fsdis, int pos,
       int writeBytes) throws IOException {
     fsdis.seek(pos);
-    byte[] buf = new byte[writeBytes];
-    int readLen = StripedFileTestUtil.readAll(fsdis, buf);
-    assertEquals(readLen, writeBytes - pos);
-    for (int i = 0; i < readLen; i++) {
-      assertEquals("Byte at " + i + " should be the same", StripedFileTestUtil.getByte(pos + i), buf[i]);
+    byte[] buf = new byte[writeBytes - pos];
+    IOUtils.readFully(fsdis, buf, 0, buf.length);
+    for (int i = 0; i < buf.length; i++) {
+      assertEquals("Byte at " + i + " should be the same",
+          StripedFileTestUtil.getByte(pos + i), buf[i]);
     }
   }
 
@@ -500,7 +492,8 @@ public class StripedFileTestUtil {
       }
     }
     final RawErasureEncoder encoder =
-        CodecUtil.createRSRawEncoder(conf, dataBytes.length, parityBytes.length);
+        CodecUtil.createRSRawEncoder(conf, dataBytes.length, parityBytes.length,
+            TEST_EC_POLICY.getCodecName());
     encoder.encode(dataBytes, expectedParityBytes);
     for (int i = 0; i < parityBytes.length; i++) {
       if (checkSet.contains(i + dataBytes.length)){

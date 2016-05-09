@@ -305,9 +305,7 @@ public class ClientRMService extends AbstractService implements
     return applicationsACLsManager
         .checkAccess(callerUGI, operationPerformed, owner,
             application.getApplicationId()) || queueACLsManager
-        .checkAccess(callerUGI, QueueACL.ADMINISTER_QUEUE,
-            application.getQueue(), application.getApplicationId(),
-            application.getName());
+        .checkAccess(callerUGI, QueueACL.ADMINISTER_QUEUE, application);
   }
 
   ApplicationId getNewApplicationId() {
@@ -1620,7 +1618,7 @@ public class ClientRMService extends AbstractService implements
     if (application == null) {
       RMAuditLogger.logFailure(callerUGI.getUserName(),
           AuditConstants.SIGNAL_CONTAINER, "UNKNOWN", "ClientRMService",
-          "Trying to signal an absent container", applicationId, containerId);
+          "Trying to signal an absent container", applicationId, containerId, null);
       throw RPCUtil
           .getRemoteException("Trying to signal an absent container "
               + containerId);
@@ -1644,11 +1642,11 @@ public class ClientRMService extends AbstractService implements
               request));
       RMAuditLogger.logSuccess(callerUGI.getShortUserName(),
           AuditConstants.SIGNAL_CONTAINER, "ClientRMService", applicationId,
-          containerId);
+          containerId, null);
     } else {
       RMAuditLogger.logFailure(callerUGI.getUserName(),
           AuditConstants.SIGNAL_CONTAINER, "UNKNOWN", "ClientRMService",
-          "Trying to signal an absent container", applicationId, containerId);
+          "Trying to signal an absent container", applicationId, containerId, null);
       throw RPCUtil
           .getRemoteException("Trying to signal an absent container "
               + containerId);

@@ -383,6 +383,20 @@ function hadoop_exec_userfuncs
 ## @audience     private
 ## @stability    evolving
 ## @replaceable  yes
+function hadoop_exec_user_hadoopenv
+{
+  if [[ -f "${HOME}/.hadoop-env" ]]; then
+    hadoop_debug "Applying the user's .hadoop-env"
+    # shellcheck disable=SC1090
+    . "${HOME}/.hadoop-env"
+  fi
+}
+
+## @description  Read the user's settings.  This provides for users to
+## @description  run Hadoop Shell API after system bootstrap
+## @audience     private
+## @stability    evolving
+## @replaceable  yes
 function hadoop_exec_hadooprc
 {
   if [[ -f "${HOME}/.hadooprc" ]]; then
@@ -2067,4 +2081,27 @@ function hadoop_parse_args
   done
 
   hadoop_debug "hadoop_parse: asking caller to skip ${HADOOP_PARSE_COUNTER}"
+}
+
+## @description  XML-escapes the characters (&'"<>) in the given parameter.
+## @audience     private
+## @stability    evolving
+## @replaceable  yes
+## @param        string
+## @return       XML-escaped string
+function hadoop_xml_escape
+{
+  sed -e 's/&/\&amp;/g' -e 's/"/\\\&quot;/g' \
+    -e "s/'/\\\\\&apos;/g" -e 's/</\\\&lt;/g' -e 's/>/\\\&gt;/g' <<< "$1"
+}
+
+## @description  sed-escapes the characters (\/&) in the given parameter.
+## @audience     private
+## @stability    evolving
+## @replaceable  yes
+## @param        string
+## @return       sed-escaped string
+function hadoop_sed_escape
+{
+  sed -e 's/[\/&]/\\&/g' <<< "$1"
 }

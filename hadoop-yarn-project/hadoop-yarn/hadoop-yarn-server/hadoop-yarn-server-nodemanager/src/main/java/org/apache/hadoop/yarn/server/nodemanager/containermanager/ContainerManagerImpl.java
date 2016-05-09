@@ -160,11 +160,11 @@ public class ContainerManagerImpl extends CompositeService implements
 
   private static final Log LOG = LogFactory.getLog(ContainerManagerImpl.class);
 
-  static final String INVALID_NMTOKEN_MSG = "Invalid NMToken";
+  public static final String INVALID_NMTOKEN_MSG = "Invalid NMToken";
   static final String INVALID_CONTAINERTOKEN_MSG =
       "Invalid ContainerToken";
 
-  final Context context;
+  protected final Context context;
   private final ContainersMonitor containersMonitor;
   private Server server;
   private final ResourceLocalizationService rsrcLocalizationSrvc;
@@ -172,7 +172,7 @@ public class ContainerManagerImpl extends CompositeService implements
   private final AuxServices auxiliaryServices;
   private final NodeManagerMetrics metrics;
 
-  private final NodeStatusUpdater nodeStatusUpdater;
+  protected final NodeStatusUpdater nodeStatusUpdater;
 
   protected LocalDirsHandlerService dirsHandler;
   protected final AsyncDispatcher dispatcher;
@@ -213,14 +213,13 @@ public class ContainerManagerImpl extends CompositeService implements
     auxiliaryServices.registerServiceListener(this);
     addService(auxiliaryServices);
 
-    this.containersMonitor =
-        new ContainersMonitorImpl(exec, dispatcher, this.context);
+    this.containersMonitor = createContainersMonitor(exec);
     addService(this.containersMonitor);
 
     dispatcher.register(ContainerEventType.class,
         new ContainerEventDispatcher());
     dispatcher.register(ApplicationEventType.class,
-        new ApplicationEventDispatcher());
+        createApplicationEventDispatcher());
     dispatcher.register(LocalizationEventType.class, rsrcLocalizationSrvc);
     dispatcher.register(AuxServicesEventType.class, auxiliaryServices);
     dispatcher.register(ContainersMonitorEventType.class, containersMonitor);
@@ -235,6 +234,7 @@ public class ContainerManagerImpl extends CompositeService implements
 
   @Override
   public void serviceInit(Configuration conf) throws Exception {
+
     LogHandler logHandler =
       createLogHandler(conf, this.context, this.deletionService);
     addIfService(logHandler);
@@ -276,6 +276,10 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
 
+  protected ContainersMonitor createContainersMonitor(ContainerExecutor exec) {
+    return new ContainersMonitorImpl(exec, dispatcher, this.context);
+  }
+
   @SuppressWarnings("unchecked")
   private void recover() throws IOException, URISyntaxException {
     NMStateStoreService stateStore = context.getNMStateStore();
@@ -296,19 +300,7 @@ public class ContainerManagerImpl extends CompositeService implements
         if (LOG.isDebugEnabled()) {
           LOG.debug("Recovering container with state: " + rcs);
         }
-
         recoverContainer(rcs);
-      }
-
-      String diagnostic = "Application marked finished during recovery";
-      for (ApplicationId appId : appsState.getFinishedApplications()) {
-
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Application marked finished during recovery: " + appId);
-        }
-
-        dispatcher.getEventHandler().handle(
-            new ApplicationFinishEvent(appId, diagnostic));
       }
     } else {
       LOG.info("Not a recoverable state store. Nothing to recover.");
@@ -362,8 +354,7 @@ public class ContainerManagerImpl extends CompositeService implements
           YarnServerSecurityUtils.parseCredentials(launchContext);
       Container container = new ContainerImpl(getConfig(), dispatcher,
           req.getContainerLaunchContext(),
-          credentials, metrics, token, rcs.getStatus(), rcs.getExitCode(),
-          rcs.getDiagnostics(), rcs.getKilled(), rcs.getCapability(), context);
+          credentials, metrics, token, context, rcs);
       context.getContainers().put(containerId, container);
       dispatcher.getEventHandler().handle(
           new ApplicationContainerInitEvent(container));
@@ -428,6 +419,10 @@ public class ContainerManagerImpl extends CompositeService implements
   protected ContainersLauncher createContainersLauncher(Context context,
       ContainerExecutor exec) {
     return new ContainersLauncher(context, this.dispatcher, exec, dirsHandler, this);
+  }
+
+  protected EventHandler<ApplicationEvent> createApplicationEventDispatcher() {
+    return new ApplicationEventDispatcher();
   }
 
   @Override
@@ -814,7 +809,8 @@ public class ContainerManagerImpl extends CompositeService implements
               .equals(ContainerType.APPLICATION_MASTER)) {
             this.getAMRMProxyService().processApplicationStartRequest(request);
           }
-
+          performContainerPreStartChecks(nmTokenIdentifier, request,
+              containerTokenIdentifier);
           startContainerInternal(nmTokenIdentifier, containerTokenIdentifier,
               request);
           succeededContainers.add(containerId);
@@ -831,6 +827,42 @@ public class ContainerManagerImpl extends CompositeService implements
       return StartContainersResponse
           .newInstance(getAuxServiceMetaData(), succeededContainers,
               failedContainers);
+    }
+  }
+
+  private void performContainerPreStartChecks(
+      NMTokenIdentifier nmTokenIdentifier, StartContainerRequest request,
+      ContainerTokenIdentifier containerTokenIdentifier)
+      throws YarnException, InvalidToken {
+  /*
+   * 1) It should save the NMToken into NMTokenSecretManager. This is done
+   * here instead of RPC layer because at the time of opening/authenticating
+   * the connection it doesn't know what all RPC calls user will make on it.
+   * Also new NMToken is issued only at startContainer (once it gets
+   * renewed).
+   *
+   * 2) It should validate containerToken. Need to check below things. a) It
+   * is signed by correct master key (part of retrieve password). b) It
+   * belongs to correct Node Manager (part of retrieve password). c) It has
+   * correct RMIdentifier. d) It is not expired.
+   */
+    authorizeStartAndResourceIncreaseRequest(
+        nmTokenIdentifier, containerTokenIdentifier, true);
+    // update NMToken
+    updateNMTokenIdentifier(nmTokenIdentifier);
+
+    ContainerLaunchContext launchContext = request.getContainerLaunchContext();
+
+    Map<String, ByteBuffer> serviceData = getAuxServiceMetaData();
+    if (launchContext.getServiceData()!=null &&
+        !launchContext.getServiceData().isEmpty()) {
+      for (Entry<String, ByteBuffer> meta : launchContext.getServiceData()
+          .entrySet()) {
+        if (null == serviceData.get(meta.getKey())) {
+          throw new InvalidAuxServiceException("The auxService:" + meta.getKey()
+              + " does not exist");
+        }
+      }
     }
   }
 
@@ -876,25 +908,9 @@ public class ContainerManagerImpl extends CompositeService implements
   }
 
   @SuppressWarnings("unchecked")
-  private void startContainerInternal(NMTokenIdentifier nmTokenIdentifier,
+  protected void startContainerInternal(NMTokenIdentifier nmTokenIdentifier,
       ContainerTokenIdentifier containerTokenIdentifier,
       StartContainerRequest request) throws YarnException, IOException {
-
-    /*
-     * 1) It should save the NMToken into NMTokenSecretManager. This is done
-     * here instead of RPC layer because at the time of opening/authenticating
-     * the connection it doesn't know what all RPC calls user will make on it.
-     * Also new NMToken is issued only at startContainer (once it gets renewed).
-     * 
-     * 2) It should validate containerToken. Need to check below things. a) It
-     * is signed by correct master key (part of retrieve password). b) It
-     * belongs to correct Node Manager (part of retrieve password). c) It has
-     * correct RMIdentifier. d) It is not expired.
-     */
-    authorizeStartAndResourceIncreaseRequest(
-        nmTokenIdentifier, containerTokenIdentifier, true);
-    // update NMToken
-    updateNMTokenIdentifier(nmTokenIdentifier);
 
     ContainerId containerId = containerTokenIdentifier.getContainerID();
     String containerIdStr = containerId.toString();
@@ -903,18 +919,6 @@ public class ContainerManagerImpl extends CompositeService implements
     LOG.info("Start request for " + containerIdStr + " by user " + user);
 
     ContainerLaunchContext launchContext = request.getContainerLaunchContext();
-
-    Map<String, ByteBuffer> serviceData = getAuxServiceMetaData();
-    if (launchContext.getServiceData()!=null && 
-        !launchContext.getServiceData().isEmpty()) {
-      for (Map.Entry<String, ByteBuffer> meta : launchContext.getServiceData()
-          .entrySet()) {
-        if (null == serviceData.get(meta.getKey())) {
-          throw new InvalidAuxServiceException("The auxService:" + meta.getKey()
-              + " does not exist");
-        }
-      }
-    }
 
     Credentials credentials =
         YarnServerSecurityUtils.parseCredentials(launchContext);
@@ -935,13 +939,14 @@ public class ContainerManagerImpl extends CompositeService implements
 
     this.readLock.lock();
     try {
-      if (!serviceStopped) {
+      if (!isServiceStopped()) {
         // Create the application
-        Application application =
-            new ApplicationImpl(dispatcher, user, applicationID, credentials, context);
+        Application application = new ApplicationImpl(dispatcher, user,
+            applicationID, credentials, context);
         if (null == context.getApplications().putIfAbsent(applicationID,
           application)) {
-          LOG.info("Creating a new application reference for app " + applicationID);
+          LOG.info("Creating a new application reference for app "
+              + applicationID);
           LogAggregationContext logAggregationContext =
               containerTokenIdentifier.getLogAggregationContext();
           Map<ApplicationAccessType, String> appAcls =
@@ -1159,7 +1164,9 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     for (ContainerId id : requests.getContainerIds()) {
       try {
-        stopContainerInternal(identifier, id);
+        Container container = this.context.getContainers().get(id);
+        authorizeGetAndStopContainerRequest(id, container, true, identifier);
+        stopContainerInternal(id);
         succeededRequests.add(id);
       } catch (YarnException e) {
         failedRequests.put(id, SerializedException.newInstance(e));
@@ -1170,13 +1177,11 @@ public class ContainerManagerImpl extends CompositeService implements
   }
 
   @SuppressWarnings("unchecked")
-  private void stopContainerInternal(NMTokenIdentifier nmTokenIdentifier,
-      ContainerId containerID) throws YarnException, IOException {
+  protected void stopContainerInternal(ContainerId containerID)
+      throws YarnException, IOException {
     String containerIDStr = containerID.toString();
     Container container = this.context.getContainers().get(containerID);
     LOG.info("Stopping container with container Id: " + containerIDStr);
-    authorizeGetAndStopContainerRequest(containerID, container, true,
-      nmTokenIdentifier);
 
     if (container == null) {
       if (!nodeStatusUpdater.isContainerRecentlyStopped(containerID)) {
@@ -1223,7 +1228,7 @@ public class ContainerManagerImpl extends CompositeService implements
       failedRequests);
   }
 
-  private ContainerStatus getContainerStatusInternal(ContainerId containerID,
+  protected ContainerStatus getContainerStatusInternal(ContainerId containerID,
       NMTokenIdentifier nmTokenIdentifier) throws YarnException {
     String containerIDStr = containerID.toString();
     Container container = this.context.getContainers().get(containerID);
@@ -1332,11 +1337,6 @@ public class ContainerManagerImpl extends CompositeService implements
         } else if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER) {
           diagnostic = "Application killed by ResourceManager";
         }
-        try {
-          this.context.getNMStateStore().storeFinishedApplication(appID);
-        } catch (IOException e) {
-          LOG.error("Unable to update application state in store", e);
-        }
         this.dispatcher.getEventHandler().handle(
             new ApplicationFinishEvent(appID,
                 diagnostic));
@@ -1424,4 +1424,7 @@ public class ContainerManagerImpl extends CompositeService implements
     this.amrmProxyService = amrmProxyService;
   }
 
+  protected boolean isServiceStopped() {
+    return serviceStopped;
+  }
 }

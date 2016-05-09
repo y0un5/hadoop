@@ -191,7 +191,7 @@ public class SimpleCopyListing extends CopyListing {
       authority = fs.getUri().getAuthority();
     }
 
-    return new Path(scheme, authority, path.toUri().getPath());
+    return new Path(scheme, authority, makeQualified(path).toUri().getPath());
   }
 
   /**
@@ -369,8 +369,12 @@ public class SimpleCopyListing extends CopyListing {
       boolean specialHandling = (options.getSourcePaths().size() == 1 && !targetPathExists) ||
           options.shouldSyncFolder() || options.shouldOverwrite();
 
-      return specialHandling && sourceStatus.isDirectory() ? sourceStatus.getPath() :
-          sourceStatus.getPath().getParent();
+      if ((specialHandling && sourceStatus.isDirectory()) ||
+          sourceStatus.getPath().isRoot()) {
+        return sourceStatus.getPath();
+      } else {
+        return sourceStatus.getPath().getParent();
+      }
     }
   }
 

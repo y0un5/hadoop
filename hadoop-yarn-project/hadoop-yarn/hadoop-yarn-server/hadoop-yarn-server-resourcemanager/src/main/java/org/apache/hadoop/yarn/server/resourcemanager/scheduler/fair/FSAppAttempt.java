@@ -135,21 +135,23 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     rmContainer.handle(
         new RMContainerFinishedEvent(
             containerId,
-            containerStatus, 
+            containerStatus,
             event)
-        );
-    LOG.info("Completed container: " + rmContainer.getContainerId() + 
-        " in state: " + rmContainer.getState() + " event:" + event);
-    
+    );
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Completed container: " + rmContainer.getContainerId() +
+              " in state: " + rmContainer.getState() + " event:" + event);
+    }
+
     // Remove from the list of containers
     liveContainers.remove(rmContainer.getContainerId());
 
+    Resource containerResource = rmContainer.getContainer().getResource();
     RMAuditLogger.logSuccess(getUser(), 
         AuditConstants.RELEASE_CONTAINER, "SchedulerApp", 
-        getApplicationId(), containerId);
+        getApplicationId(), containerId, containerResource);
     
     // Update usage metrics 
-    Resource containerResource = rmContainer.getContainer().getResource();
     queue.getMetrics().releaseResources(getUser(), 1, containerResource);
     this.attemptResourceUsage.decUsed(containerResource);
 
@@ -376,6 +378,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     RMContainer rmContainer = new RMContainerImpl(container, 
         getApplicationAttemptId(), node.getNodeID(),
         appSchedulingInfo.getUser(), rmContext);
+    ((RMContainerImpl)rmContainer).setQueueName(this.getQueueName());
 
     // Add it to allContainers list.
     newlyAllocatedContainers.add(rmContainer);
@@ -401,7 +404,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     }
     RMAuditLogger.logSuccess(getUser(), 
         AuditConstants.ALLOC_CONTAINER, "SchedulerApp", 
-        getApplicationId(), container.getId());
+        getApplicationId(), container.getId(), container.getResource());
     
     return rmContainer;
   }

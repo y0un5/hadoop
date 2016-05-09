@@ -225,6 +225,13 @@ this capability.
     </property>
 
     <property>
+      <name>fs.s3a.path.style.access</name>
+      <description>Enable S3 path style access ie disabling the default virtual hosting behaviour.
+        Useful for S3A-compliant storage providers as it removes the need to set up DNS for virtual hosting.
+      </description>
+    </property>
+
+    <property>
       <name>fs.s3a.proxy.host</name>
       <description>Hostname of the (optional) proxy server for S3 connections.</description>
     </property>
@@ -305,7 +312,9 @@ this capability.
     <property>
       <name>fs.s3a.multipart.size</name>
       <value>104857600</value>
-      <description>How big (in bytes) to split upload or copy operations up into.</description>
+      <description>How big (in bytes) to split upload or copy operations up into.
+      This also controls the partition size in renamed files, as rename() involves
+      copying the source file(s)</description>
     </property>
 
     <property>

@@ -503,7 +503,7 @@ public abstract class AbstractYarnScheduler
                 "Unauthorized access or invalid container", "Scheduler",
                 "Trying to release container not owned by app "
                     + "or with invalid id.", attempt.getApplicationId(),
-                containerId);
+                containerId, null);
           }
           attempt.getPendingRelease().clear();
         }
@@ -554,7 +554,7 @@ public abstract class AbstractYarnScheduler
             AuditConstants.RELEASE_CONTAINER,
             "Unauthorized access or invalid container", "Scheduler",
             "Trying to release container not owned by app or with invalid id.",
-            attempt.getApplicationId(), containerId);
+            attempt.getApplicationId(), containerId, null);
         }
       }
       completedContainer(rmContainer,
@@ -659,7 +659,7 @@ public abstract class AbstractYarnScheduler
       nodeTracker.removeNode(nm.getNodeID());
 
       // update resource to node
-      node.setTotalResource(newResource);
+      node.updateTotalResource(newResource);
 
       nodeTracker.addNode((N) node);
     } else {

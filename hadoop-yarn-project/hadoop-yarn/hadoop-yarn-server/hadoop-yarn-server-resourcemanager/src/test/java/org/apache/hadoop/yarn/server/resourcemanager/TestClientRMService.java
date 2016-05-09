@@ -28,6 +28,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -186,7 +188,7 @@ public class TestClientRMService {
     MockNM lostNode = rm.registerNode("host2:1235", 1024);
     rm.sendNodeStarted(lostNode);
     lostNode.nodeHeartbeat(true);
-    rm.NMwaitForState(lostNode.getNodeId(), NodeState.RUNNING);
+    rm.waitForState(lostNode.getNodeId(), NodeState.RUNNING);
     rm.sendNodeLost(lostNode);
 
     // Create a client.
@@ -212,7 +214,7 @@ public class TestClientRMService {
 
     // Now make the node unhealthy.
     node.nodeHeartbeat(false);
-    rm.NMwaitForState(node.getNodeId(), NodeState.UNHEALTHY);
+    rm.waitForState(node.getNodeId(), NodeState.UNHEALTHY);
 
     // Call again
     nodeReports = client.getClusterNodes(request).getNodeReports();
@@ -249,7 +251,7 @@ public class TestClientRMService {
       Assert.assertTrue(report.getNodeLabels() != null
           && report.getNodeLabels().isEmpty());
     }
-    
+
     rpc.stopProxy(client, conf);
     rm.close();
   }
@@ -471,8 +473,7 @@ public class TestClientRMService {
     QueueACLsManager mockQueueACLsManager = mock(QueueACLsManager.class);
     when(
         mockQueueACLsManager.checkAccess(any(UserGroupInformation.class),
-            any(QueueACL.class), anyString(), any(ApplicationId.class),
-            anyString())).thenReturn(true);
+            any(QueueACL.class), any(RMApp.class))).thenReturn(true);
     return new ClientRMService(rmContext, yarnScheduler, appManager,
         mockAclsManager, mockQueueACLsManager, null);
   }
@@ -573,8 +574,7 @@ public class TestClientRMService {
     ApplicationACLsManager mockAclsManager = mock(ApplicationACLsManager.class);
     QueueACLsManager mockQueueACLsManager = mock(QueueACLsManager.class);
     when(mockQueueACLsManager.checkAccess(any(UserGroupInformation.class),
-        any(QueueACL.class), anyString(), any(ApplicationId.class),
-        anyString())).thenReturn(true);
+        any(QueueACL.class), any(RMApp.class))).thenReturn(true);
     when(mockAclsManager.checkAccess(any(UserGroupInformation.class),
         any(ApplicationAccessType.class), anyString(),
         any(ApplicationId.class))).thenReturn(true);
@@ -600,8 +600,7 @@ public class TestClientRMService {
     QueueACLsManager mockQueueACLsManager1 =
         mock(QueueACLsManager.class);
     when(mockQueueACLsManager1.checkAccess(any(UserGroupInformation.class),
-        any(QueueACL.class), anyString(), any(ApplicationId.class),
-        anyString())).thenReturn(false);
+        any(QueueACL.class), any(RMApp.class))).thenReturn(false);
     when(mockAclsManager1.checkAccess(any(UserGroupInformation.class),
         any(ApplicationAccessType.class), anyString(),
         any(ApplicationId.class))).thenReturn(false);
@@ -640,8 +639,7 @@ public class TestClientRMService {
 
     QueueACLsManager mockQueueACLsManager = mock(QueueACLsManager.class);
     when(mockQueueACLsManager.checkAccess(any(UserGroupInformation.class),
-        any(QueueACL.class), anyString(), any(ApplicationId.class),
-        anyString())).thenReturn(true);
+        any(QueueACL.class), any(RMApp.class))).thenReturn(true);
     ClientRMService rmService =
         new ClientRMService(rmContext, yarnScheduler, appManager,
             mockAclsManager, mockQueueACLsManager, null);
@@ -729,8 +727,7 @@ public class TestClientRMService {
     ApplicationACLsManager mockAclsManager = mock(ApplicationACLsManager.class);
     QueueACLsManager mockQueueACLsManager = mock(QueueACLsManager.class);
     when(mockQueueACLsManager.checkAccess(any(UserGroupInformation.class),
-        any(QueueACL.class), anyString(), any(ApplicationId.class),
-        anyString())).thenReturn(true);
+        any(QueueACL.class), any(RMApp.class))).thenReturn(true);
     ClientRMService rmService =
         new ClientRMService(rmContext, yarnScheduler, appManager,
             mockAclsManager, mockQueueACLsManager, null);
@@ -1565,5 +1562,50 @@ public class TestClientRMService {
             .getPriority());
     Assert.assertEquals("Incorrect priority has been returned", expected,
         updateApplicationPriority.getApplicationPriority().getPriority());
+  }
+
+  private void createExcludeFile(String filename) throws IOException {
+    File file = new File(filename);
+    if (file.exists()) {
+      file.delete();
+    }
+
+    FileOutputStream out = new FileOutputStream(file);
+    out.write("decommisssionedHost".getBytes());
+    out.close();
+  }
+
+  @Test
+  public void testRMStartWithDecommissionedNode() throws Exception {
+    String excludeFile = "excludeFile";
+    createExcludeFile(excludeFile);
+    YarnConfiguration conf = new YarnConfiguration();
+    conf.set(YarnConfiguration.RM_NODES_EXCLUDE_FILE_PATH,
+        excludeFile);
+    MockRM rm = new MockRM(conf) {
+      protected ClientRMService createClientRMService() {
+        return new ClientRMService(this.rmContext, scheduler,
+            this.rmAppManager, this.applicationACLsManager, this.queueACLsManager,
+            this.getRMContext().getRMDelegationTokenSecretManager());
+      };
+    };
+    rm.start();
+
+    YarnRPC rpc = YarnRPC.create(conf);
+    InetSocketAddress rmAddress = rm.getClientRMService().getBindAddress();
+    LOG.info("Connecting to ResourceManager at " + rmAddress);
+    ApplicationClientProtocol client =
+        (ApplicationClientProtocol) rpc
+            .getProxy(ApplicationClientProtocol.class, rmAddress, conf);
+
+    // Make call
+    GetClusterNodesRequest request =
+        GetClusterNodesRequest.newInstance(EnumSet.allOf(NodeState.class));
+    List<NodeReport> nodeReports = client.getClusterNodes(request).getNodeReports();
+    Assert.assertEquals(1, nodeReports.size());
+
+    rm.stop();
+    rpc.stopProxy(client, conf);
+    new File(excludeFile).delete();
   }
 }

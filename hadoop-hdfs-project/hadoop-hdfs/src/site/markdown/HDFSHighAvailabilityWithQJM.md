@@ -155,15 +155,15 @@ The order in which you set these configurations is unimportant, but the values y
 
         <property>
           <name>dfs.namenode.rpc-address.mycluster.nn1</name>
-          <value>machine1.example.com:8020</value>
+          <value>machine1.example.com:9820</value>
         </property>
         <property>
           <name>dfs.namenode.rpc-address.mycluster.nn2</name>
-          <value>machine2.example.com:8020</value>
+          <value>machine2.example.com:9820</value>
         </property>
         <property>
           <name>dfs.namenode.rpc-address.mycluster.nn3</name>
-          <value>machine3.example.com:8020</value>
+          <value>machine3.example.com:9820</value>
         </property>
 
     **Note:** You may similarly configure the "**servicerpc-address**" setting if you so desire.
@@ -175,15 +175,15 @@ The order in which you set these configurations is unimportant, but the values y
 
         <property>
           <name>dfs.namenode.http-address.mycluster.nn1</name>
-          <value>machine1.example.com:50070</value>
+          <value>machine1.example.com:9870</value>
         </property>
         <property>
           <name>dfs.namenode.http-address.mycluster.nn2</name>
-          <value>machine2.example.com:50070</value>
+          <value>machine2.example.com:9870</value>
         </property>
         <property>
           <name>dfs.namenode.http-address.mycluster.nn3</name>
-          <value>machine3.example.com:50070</value>
+          <value>machine3.example.com:9870</value>
         </property>
 
     **Note:** If you have Hadoop's security features enabled, you should also set
@@ -367,7 +367,7 @@ The order in which you set these configurations is unimportant, but the values y
 
 ### Deployment details
 
-After all of the necessary configuration options have been set, you must start the JournalNode daemons on the set of machines where they will run. This can be done by running the command "*hdfs --daemon start journalnode*" and waiting for the daemon to start on each of the relevant machines.
+After all of the necessary configuration options have been set, you must start the JournalNode daemons on the set of machines where they will run. This can be done by running the command "*hdfs \--daemon start journalnode*" and waiting for the daemon to start on each of the relevant machines.
 
 Once the JournalNodes have been started, one must initially synchronize the two HA NameNodes' on-disk metadata.
 

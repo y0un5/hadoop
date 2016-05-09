@@ -25,7 +25,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -92,7 +91,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.TestSchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
@@ -1086,6 +1084,7 @@ public class TestFifoScheduler {
 
   @Test(timeout = 60000)
   public void testResourceOverCommit() throws Exception {
+    int waitCount;
     MockRM rm = new MockRM(conf);
     rm.start();
 
@@ -1138,9 +1137,18 @@ public class TestFifoScheduler {
         UpdateNodeResourceRequest.newInstance(nodeResourceMap);
     rm.getAdminService().updateNodeResource(request);
 
+    waitCount = 0;
+    while (waitCount++ != 20) {
+      report_nm1 = rm.getResourceScheduler().getNodeReport(nm1.getNodeId());
+      if (report_nm1.getAvailableResource().getMemory() != 0) {
+        break;
+      }
+      LOG.info("Waiting for RMNodeResourceUpdateEvent to be handled... Tried "
+          + waitCount + " times already..");
+      Thread.sleep(1000);
+    }
     // Now, the used resource is still 4 GB, and available resource is minus
     // value.
-    report_nm1 = rm.getResourceScheduler().getNodeReport(nm1.getNodeId());
     Assert.assertEquals(4 * GB, report_nm1.getUsedResource().getMemory());
     Assert.assertEquals(-2 * GB, report_nm1.getAvailableResource().getMemory());
 
@@ -1150,7 +1158,7 @@ public class TestFifoScheduler {
         BuilderUtils.newContainerStatus(c1.getId(), ContainerState.COMPLETE,
             "", 0, c1.getResource());
     nm1.containerStatus(containerStatus);
-    int waitCount = 0;
+    waitCount = 0;
     while (attempt1.getJustFinishedContainers().size() < 1 && waitCount++ != 20) {
       LOG.info("Waiting for containers to be finished for app 1... Tried "
           + waitCount + " times already..");
@@ -1181,7 +1189,7 @@ public class TestFifoScheduler {
           resourceManager
               .getResourceScheduler()
               .getSchedulerNode(resourceEvent.getNodeId())
-              .setTotalResource(resourceEvent.getResourceOption().getResource());
+              .updateTotalResource(resourceEvent.getResourceOption().getResource());
         }
       }
     });

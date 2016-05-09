@@ -32,6 +32,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +77,8 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
+import org.apache.hadoop.yarn.api.records.ContainerRetryContext;
+import org.apache.hadoop.yarn.api.records.ContainerRetryPolicy;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
@@ -104,6 +107,7 @@ import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 import org.apache.log4j.LogManager;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.sun.jersey.api.client.ClientHandlerException;
 
 /**
  * An ApplicationMaster for executing shell commands on a set of launched
@@ -255,6 +259,13 @@ public class ApplicationMaster {
   // File length needed for local resource
   private long shellScriptPathLen = 0;
 
+  // Container retry options
+  private ContainerRetryPolicy containerRetryPolicy =
+      ContainerRetryPolicy.NEVER_RETRY;
+  private Set<Integer> containerRetryErrorCodes = null;
+  private int containerMaxRetries = 0;
+  private int containrRetryInterval = 0;
+
   // Timeline domain ID
   private String domainId = null;
 
@@ -377,6 +388,18 @@ public class ApplicationMaster {
     opts.addOption("num_containers", true,
         "No. of containers on which the shell command needs to be executed");
     opts.addOption("priority", true, "Application Priority. Default 0");
+    opts.addOption("container_retry_policy", true,
+        "Retry policy when container fails to run, "
+            + "0: NEVER_RETRY, 1: RETRY_ON_ALL_ERRORS, "
+            + "2: RETRY_ON_SPECIFIC_ERROR_CODES");
+    opts.addOption("container_retry_error_codes", true,
+        "When retry policy is set to RETRY_ON_SPECIFIC_ERROR_CODES, error "
+            + "codes is specified with this option, "
+            + "e.g. --container_retry_error_codes 1,2,3");
+    opts.addOption("container_max_retries", true,
+        "If container could retry, it specifies max retires");
+    opts.addOption("container_retry_interval", true,
+        "Interval between each retry, unit is milliseconds");
     opts.addOption("debug", false, "Dump out debug information");
 
     opts.addOption("help", false, "Print usage");
@@ -514,6 +537,21 @@ public class ApplicationMaster {
     }
     requestPriority = Integer.parseInt(cliParser
         .getOptionValue("priority", "0"));
+
+    containerRetryPolicy = ContainerRetryPolicy.values()[
+        Integer.parseInt(cliParser.getOptionValue(
+            "container_retry_policy", "0"))];
+    if (cliParser.hasOption("container_retry_error_codes")) {
+      containerRetryErrorCodes = new HashSet<>();
+      for (String errorCode :
+          cliParser.getOptionValue("container_retry_error_codes").split(",")) {
+        containerRetryErrorCodes.add(Integer.parseInt(errorCode));
+      }
+    }
+    containerMaxRetries = Integer.parseInt(
+        cliParser.getOptionValue("container_max_retries", "0"));
+    containrRetryInterval = Integer.parseInt(cliParser.getOptionValue(
+        "container_retry_interval", "0"));
     return true;
   }
 
@@ -1068,9 +1106,13 @@ public class ApplicationMaster {
       // "hadoop dfs" command inside the distributed shell.
       Map<String, String> myShellEnv = new HashMap<String, String>(shellEnv);
       myShellEnv.put(YARN_SHELL_ID, shellId);
+      ContainerRetryContext containerRetryContext =
+          ContainerRetryContext.newInstance(
+              containerRetryPolicy, containerRetryErrorCodes,
+              containerMaxRetries, containrRetryInterval);
       ContainerLaunchContext ctx = ContainerLaunchContext.newInstance(
         localResources, myShellEnv, commands, null, allTokens.duplicate(),
-          null);
+          null, containerRetryContext);
       containerListener.addContainer(container.getId(), container);
       nmClientAsync.startContainerAsync(container, ctx);
     }
@@ -1149,13 +1191,14 @@ public class ApplicationMaster {
           putContainerEntity(timelineClient,
               container.getId().getApplicationAttemptId(),
               entity));
-    } catch (YarnException | IOException e) {
+    } catch (YarnException | IOException | ClientHandlerException e) {
       LOG.error("Container start event could not be published for "
           + container.getId().toString(), e);
     }
   }
 
-  private void publishContainerEndEvent(
+  @VisibleForTesting
+  void publishContainerEndEvent(
       final TimelineClient timelineClient, ContainerStatus container,
       String domainId, UserGroupInformation ugi) {
     final TimelineEntity entity = new TimelineEntity();
@@ -1177,7 +1220,7 @@ public class ApplicationMaster {
           putContainerEntity(timelineClient,
               container.getContainerId().getApplicationAttemptId(),
               entity));
-    } catch (YarnException | IOException e) {
+    } catch (YarnException | IOException | ClientHandlerException e) {
       LOG.error("Container end event could not be published for "
           + container.getContainerId().toString(), e);
     }
@@ -1212,7 +1255,7 @@ public class ApplicationMaster {
     try {
       TimelinePutResponse response = timelineClient.putEntities(entity);
       processTimelineResponseErrors(response);
-    } catch (YarnException | IOException e) {
+    } catch (YarnException | IOException | ClientHandlerException e) {
       LOG.error("App Attempt "
           + (appEvent.equals(DSEvent.DS_APP_ATTEMPT_START) ? "start" : "end")
           + " event could not be published for "

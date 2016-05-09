@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.tools;
 
+import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
@@ -31,6 +32,7 @@ import org.apache.hadoop.io.SequenceFile;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.security.Credentials;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.tools.mapred.CopyMapper;
 import org.junit.After;
 import org.junit.Assert;
@@ -673,5 +675,68 @@ public class TestDistCpSync {
     dfs.createSnapshot(source, "s2");
 
     testAndVerify(numCreatedModified);
+  }
+
+  private void initData9(Path dir) throws Exception {
+    final Path foo = new Path(dir, "foo");
+    final Path foo_f1 = new Path(foo, "f1");
+
+    DFSTestUtil.createFile(dfs, foo_f1, BLOCK_SIZE, DATA_NUM, 0L);
+  }
+
+  private void changeData9(Path dir) throws Exception {
+    final Path foo = new Path(dir, "foo");
+    final Path foo_f2 = new Path(foo, "f2");
+
+    DFSTestUtil.createFile(dfs, foo_f2, BLOCK_SIZE, DATA_NUM, 0L);
+  }
+
+  /**
+   * Test a case where the source path is relative.
+   */
+  @Test
+  public void testSync9() throws Exception {
+
+    // use /user/$USER/source for source directory
+    Path sourcePath = new Path(dfs.getWorkingDirectory(), "source");
+    initData9(sourcePath);
+    initData9(target);
+    dfs.allowSnapshot(sourcePath);
+    dfs.allowSnapshot(target);
+    dfs.createSnapshot(sourcePath, "s1");
+    dfs.createSnapshot(target, "s1");
+    changeData9(sourcePath);
+    dfs.createSnapshot(sourcePath, "s2");
+
+    String[] args = new String[]{"-update","-diff", "s1", "s2",
+                                   "source", target.toString()};
+    new DistCp(conf, OptionsParser.parse(args)).execute();
+    verifyCopy(dfs.getFileStatus(sourcePath),
+                 dfs.getFileStatus(target), false);
+  }
+
+  @Test
+  public void testSyncSnapshotTimeStampChecking() throws Exception {
+    initData(source);
+    initData(target);
+    dfs.allowSnapshot(source);
+    dfs.allowSnapshot(target);
+    dfs.createSnapshot(source, "s2");
+    dfs.createSnapshot(target, "s1");
+    // Sleep one second to make snapshot s1 created later than s2
+    Thread.sleep(1000);
+    dfs.createSnapshot(source, "s1");
+
+    boolean threwException = false;
+    try {
+      DistCpSync distCpSync = new DistCpSync(options, conf);
+      // do the sync
+      distCpSync.sync();
+    } catch (HadoopIllegalArgumentException e) {
+      threwException = true;
+      GenericTestUtils.assertExceptionContains(
+          "Snapshot s2 should be newer than s1", e);
+    }
+    Assert.assertTrue(threwException);
   }
 }

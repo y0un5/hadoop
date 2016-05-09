@@ -259,6 +259,10 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
     assertEquals(1, context.getApplications().size());
     app = context.getApplications().get(appId);
     assertNotNull(app);
+    // no longer saving FINISH_APP event in NM stateStore,
+    // simulate by resending FINISH_APP event
+    cm.handle(new CMgrCompletedAppsEvent(finishedApps,
+        CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER));
     waitForAppState(app, ApplicationState.APPLICATION_RESOURCES_CLEANINGUP);
     assertTrue(context.getApplicationACLsManager().checkAccess(
         UserGroupInformation.createRemoteUser(modUser),
@@ -471,7 +475,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
       NMStateStoreService stateStore) {
     NMContext context = new NMContext(new NMContainerTokenSecretManager(
         conf), new NMTokenSecretManagerInNM(), null,
-        new ApplicationACLsManager(conf), stateStore){
+        new ApplicationACLsManager(conf), stateStore, false){
       public int getHttpPort() {
         return HTTP_PORT;
       }

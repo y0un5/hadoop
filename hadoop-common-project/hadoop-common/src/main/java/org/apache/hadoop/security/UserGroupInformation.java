@@ -126,6 +126,10 @@ public class UserGroupInformation {
       return DefaultMetricsSystem.instance().register(new UgiMetrics());
     }
 
+    static void reattach() {
+      metrics = UgiMetrics.create();
+    }
+
     void addGetGroups(long latency) {
       getGroups.add(latency);
       if (getGroupsQuantiles != null) {
@@ -236,6 +240,13 @@ public class UserGroupInformation {
       }
       return true;
     }
+  }
+
+  /**
+   * Reattach the class's metrics to a new metric system.
+   */
+  public static void reattachMetrics() {
+    UgiMetrics.reattach();
   }
 
   /** Metrics to track UGI activity */
@@ -1602,9 +1613,11 @@ public class UserGroupInformation {
       return result.toArray(new String[result.size()]);
     } catch (IOException ie) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("No groups available for user " + getShortUserName());
+        LOG.debug("Failed to get groups for user " + getShortUserName()
+            + " by " + ie);
+        LOG.trace("TRACE", ie);
       }
-      return new String[0];
+      return StringUtils.emptyStringArray;
     }
   }
   

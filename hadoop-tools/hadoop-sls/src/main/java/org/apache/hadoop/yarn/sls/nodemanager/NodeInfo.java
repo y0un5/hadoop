@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.records.QueuedContainersStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
@@ -190,6 +191,10 @@ public class NodeInfo {
       return null;
     }
 
+    public QueuedContainersStatus getQueuedContainersStatus() {
+      return null;
+    }
+
     @Override
     public ResourceUtilization getAggregatedContainersUtilization() {
       return null;
@@ -198,6 +203,15 @@ public class NodeInfo {
     @Override
     public ResourceUtilization getNodeUtilization() {
       return null;
+    }
+
+    @Override
+    public long getUntrackedTimeStamp() {
+      return 0;
+    }
+
+    @Override
+    public void setUntrackedTimeStamp(long timeStamp) {
     }
   }
 

@@ -165,12 +165,12 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
 
     containersToPreempt.remove(containerId);
 
+    Resource containerResource = rmContainer.getContainer().getResource();
     RMAuditLogger.logSuccess(getUser(),
         AuditConstants.RELEASE_CONTAINER, "SchedulerApp",
-        getApplicationId(), containerId);
+        getApplicationId(), containerId, containerResource);
     
     // Update usage metrics 
-    Resource containerResource = rmContainer.getContainer().getResource();
     queue.getMetrics().releaseResources(getUser(), 1, containerResource);
     attemptResourceUsage.decUsed(partition, containerResource);
 
@@ -199,6 +199,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
         new RMContainerImpl(container, this.getApplicationAttemptId(),
             node.getNodeID(), appSchedulingInfo.getUser(), this.rmContext,
             request.getNodeLabelExpression());
+    ((RMContainerImpl)rmContainer).setQueueName(this.getQueueName());
 
     updateAMContainerDiagnostics(AMState.ASSIGNED, null);
 
@@ -229,7 +230,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
     }
     RMAuditLogger.logSuccess(getUser(),
         AuditConstants.ALLOC_CONTAINER, "SchedulerApp",
-        getApplicationId(), containerId);
+        getApplicationId(), containerId, container.getResource());
     
     return rmContainer;
   }
@@ -245,6 +246,8 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
 
       // Update reserved metrics
       queue.getMetrics().unreserveResource(getUser(),
+          rmContainer.getReservedResource());
+      queue.decReservedResource(node.getPartition(),
           rmContainer.getReservedResource());
       return true;
     }

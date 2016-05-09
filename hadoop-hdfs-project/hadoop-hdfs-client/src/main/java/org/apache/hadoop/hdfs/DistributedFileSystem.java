@@ -25,13 +25,13 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.BlockStoragePolicySpi;
@@ -191,7 +191,7 @@ public class DistributedFileSystem extends FileSystem {
    * @return path component of {file}
    * @throws IllegalArgumentException if URI does not belong to this DFS
    */
-  private String getPathName(Path file) {
+  String getPathName(Path file) {
     checkPath(file);
     String result = file.toUri().getPath();
     if (!DFSUtilClient.isValidName(result)) {
@@ -2410,6 +2410,9 @@ public class DistributedFileSystem extends FileSystem {
       while (it.hasNext()) {
         Path ezTrashRoot = new Path(it.next().getPath(),
             FileSystem.TRASH_PREFIX);
+        if (!exists(ezTrashRoot)) {
+          continue;
+        }
         if (allUsers) {
           for (FileStatus candidate : listStatus(ezTrashRoot)) {
             if (exists(candidate.getPath())) {
@@ -2428,5 +2431,23 @@ public class DistributedFileSystem extends FileSystem {
       DFSClient.LOG.warn("Cannot get all encrypted trash roots", e);
     }
     return ret;
+  }
+
+  private final AsyncDistributedFileSystem adfs =
+      new AsyncDistributedFileSystem(this);
+
+  /** @return an {@link AsyncDistributedFileSystem} object. */
+  @Unstable
+  public AsyncDistributedFileSystem getAsyncDistributedFileSystem() {
+    return adfs;
+  }
+
+  @Override
+  protected Path fixRelativePart(Path p) {
+    return super.fixRelativePart(p);
+  }
+
+  Statistics getFsStatistics() {
+    return statistics;
   }
 }

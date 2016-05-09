@@ -50,7 +50,6 @@ import org.apache.hadoop.yarn.server.nodemanager.NodeHealthCheckerService;
 import org.apache.hadoop.yarn.server.nodemanager.NodeManager;
 import org.apache.hadoop.yarn.server.nodemanager.ResourceView;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationImpl;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher.ContainerLaunch;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.WebServer.NMWebApp;
@@ -111,7 +110,7 @@ public class TestNMWebServices extends JerseyTestBase {
       healthChecker.init(conf);
       aclsManager = new ApplicationACLsManager(conf);
       nmContext = new NodeManager.NMContext(null, null, dirsHandler,
-          aclsManager, null);
+          aclsManager, null, false);
       NodeId nodeId = NodeId.newInstance("testhost.foo.com", 8042);
       ((NodeManager.NMContext)nmContext).setNodeId(nodeId);
       resourceView = new ResourceView() {
@@ -352,7 +351,16 @@ public class TestNMWebServices extends JerseyTestBase {
         .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
     String responseText = response.getEntity(String.class);
     assertEquals(logMessage, responseText);
-    
+
+    // ask and download it
+    response = r.path("ws").path("v1").path("node").path("containerlogs")
+        .path(containerIdStr).path(filename).queryParam("download", "true")
+        .accept(MediaType.TEXT_PLAIN).get(ClientResponse.class);
+    responseText = response.getEntity(String.class);
+    assertEquals(logMessage, responseText);
+    assertEquals(200, response.getStatus());
+    assertEquals("application/octet-stream", response.getType().toString());
+
     // ask for file that doesn't exist
     response = r.path("ws").path("v1").path("node")
         .path("containerlogs").path(containerIdStr).path("uhhh")
