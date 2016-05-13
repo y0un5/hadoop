@@ -35,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.protocolrecords.StartContainerRequest;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -56,6 +57,8 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Ap
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainersMonitorImpl.ProcessTreeInfo;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
+import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerState;
+import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerStatus;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,14 +104,14 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
   }
 
   @Override
-  protected void startContainerInternal(NMTokenIdentifier nmTokenIdentifier,
+  protected void startContainerInternal(
       ContainerTokenIdentifier containerTokenIdentifier,
       StartContainerRequest request) throws YarnException, IOException {
     this.context.getQueuingContext().getQueuedContainers().put(
         containerTokenIdentifier.getContainerID(), containerTokenIdentifier);
 
     AllocatedContainerInfo allocatedContInfo = new AllocatedContainerInfo(
-        containerTokenIdentifier, nmTokenIdentifier, request,
+        containerTokenIdentifier, request,
         containerTokenIdentifier.getExecutionType(), containerTokenIdentifier
             .getResource(), getConfig());
 
@@ -121,6 +124,11 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
             hasResourcesAvailable(allocatedContInfo.getPti())) {
       startAllocatedContainer(allocatedContInfo);
     } else {
+      this.context.getNMStateStore().storeContainer(containerTokenIdentifier
+          .getContainerID(), request);
+      this.context.getNMStateStore().storeContainerQueued(
+          containerTokenIdentifier.getContainerID());
+
       if (allocatedContInfo.getExecutionType() == ExecutionType.GUARANTEED) {
         queuedGuaranteedContainers.add(allocatedContInfo);
         // Kill running opportunistic containers to make space for
@@ -150,6 +158,7 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
         this.context.getQueuingContext().getKilledQueuedContainers().put(
             containerTokenId,
             "Queued container request removed by ApplicationMaster.");
+        this.context.getNMStateStore().storeContainerKilled(containerID);
       } else {
         // The container started execution in the meanwhile.
         try {
@@ -189,7 +198,6 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
     this.context.getQueuingContext().getQueuedContainers().remove(containerId);
     try {
       super.startContainerInternal(
-          allocatedContainerInfo.getNMTokenIdentifier(),
           allocatedContainerInfo.getContainerTokenIdentifier(),
           allocatedContainerInfo.getStartRequest());
     } catch (YarnException | IOException e) {
@@ -447,6 +455,38 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
     return super.getContainerStatusInternal(containerID, nmTokenIdentifier);
   }
 
+  /**
+   * Recover running or queued container.
+   */
+  @Override
+  protected void recoverActiveContainer(
+      ContainerLaunchContext launchContext, ContainerTokenIdentifier token,
+      RecoveredContainerState rcs) throws IOException {
+    if (rcs.getStatus() ==
+        RecoveredContainerStatus.QUEUED && !rcs.getKilled()) {
+      LOG.info(token.getContainerID()
+          + "will be added to the queued containers.");
+
+      AllocatedContainerInfo allocatedContInfo = new AllocatedContainerInfo(
+          token, rcs.getStartRequest(), token.getExecutionType(),
+              token.getResource(), getConfig());
+
+      this.context.getQueuingContext().getQueuedContainers().put(
+          token.getContainerID(), token);
+
+      if (allocatedContInfo.getExecutionType() == ExecutionType.GUARANTEED) {
+        queuedGuaranteedContainers.add(allocatedContInfo);
+        // Kill running opportunistic containers to make space for
+        // guaranteed container.
+        killOpportunisticContainers(allocatedContInfo);
+      } else {
+        queuedOpportunisticContainers.add(allocatedContInfo);
+      }
+    } else {
+      super.recoverActiveContainer(launchContext, token, rcs);
+    }
+  }
+
   @VisibleForTesting
   public int getNumAllocatedGuaranteedContainers() {
     return allocatedGuaranteedContainers.size();
@@ -467,7 +507,6 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public void handle(ApplicationEvent event) {
       if (event.getType() ==
           ApplicationEventType.APPLICATION_CONTAINER_FINISHED) {
@@ -489,16 +528,14 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
 
   static class AllocatedContainerInfo {
     private final ContainerTokenIdentifier containerTokenIdentifier;
-    private final NMTokenIdentifier nmTokenIdentifier;
     private final StartContainerRequest startRequest;
     private final ExecutionType executionType;
     private final ProcessTreeInfo pti;
 
     AllocatedContainerInfo(ContainerTokenIdentifier containerTokenIdentifier,
-        NMTokenIdentifier nmTokenIdentifier, StartContainerRequest startRequest,
-        ExecutionType executionType, Resource resource, Configuration conf) {
+        StartContainerRequest startRequest, ExecutionType executionType,
+        Resource resource, Configuration conf) {
       this.containerTokenIdentifier = containerTokenIdentifier;
-      this.nmTokenIdentifier = nmTokenIdentifier;
       this.startRequest = startRequest;
       this.executionType = executionType;
       this.pti = createProcessTreeInfo(containerTokenIdentifier
@@ -507,10 +544,6 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
 
     private ContainerTokenIdentifier getContainerTokenIdentifier() {
       return this.containerTokenIdentifier;
-    }
-
-    private NMTokenIdentifier getNMTokenIdentifier() {
-      return this.nmTokenIdentifier;
     }
 
     private StartContainerRequest getStartRequest() {
