@@ -261,6 +261,18 @@
 </property>
 
 <property>
+    <name>hadoop.security.group.mapping.ldap.search.attr.memberof</name>
+    <value></value>
+    <description>
+      The attribute of the user object that identifies its group objects. By
+      default, Hadoop makes two LDAP queries per user if this value is empty. If
+      set, Hadoop will attempt to resolve group names from this attribute,
+      instead of making the second LDAP query to get group objects. The value
+      should be 'memberOf' for an MS AD installation.
+    </description>
+</property>
+
+<property>
   <name>hadoop.security.group.mapping.ldap.search.attr.member</name>
   <value>member</value>
   <description>
@@ -745,12 +757,17 @@
 
 <property>
   <name>fs.s3a.access.key</name>
-  <description>AWS access key ID used by S3A file system. Omit for Role-based authentication.</description>
+  <description>AWS access key ID used by S3A file system. Omit for IAM role-based or provider-based authentication.</description>
 </property>
 
 <property>
   <name>fs.s3a.secret.key</name>
-  <description>AWS secret key used by S3A file system. Omit for Role-based authentication.</description>
+  <description>AWS secret key used by S3A file system. Omit for IAM role-based or provider-based authentication.</description>
+</property>
+
+<property>
+  <name>fs.s3a.aws.credentials.provider</name>
+  <description>Class name of a credentials provider that implements com.amazonaws.auth.AWSCredentialsProvider. Omit if using access/secret keys or another authentication mechanism.</description>
 </property>
 
 <property>
@@ -2142,5 +2159,18 @@
     </description>
     <name>hadoop.http.logs.enabled</name>
     <value>true</value>
+  </property>
+
+  <property>
+    <name>fs.client.resolve.topology.enabled</name>
+    <value>false</value>
+    <description>Whether the client machine will use the class specified by
+      property net.topology.node.switch.mapping.impl to compute the network
+      distance between itself and remote machines of the FileSystem. Additional
+      properties might need to be configured depending on the class specified
+      in net.topology.node.switch.mapping.impl. For example, if
+      org.apache.hadoop.net.ScriptBasedMapping is used, a valid script file
+      needs to be specified in net.topology.script.file.name.
+    </description>
   </property>
 </configuration>

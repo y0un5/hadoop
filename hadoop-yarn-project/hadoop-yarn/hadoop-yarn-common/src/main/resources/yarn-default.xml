@@ -1589,6 +1589,12 @@
   </property>
 
   <property>
+    <description>Minimum container restart interval in milliseconds.</description>
+    <name>yarn.nodemanager.container-retry-minimum-interval-ms</name>
+    <value>1000</value>
+  </property>
+
+  <property>
     <description>Max number of threads in NMClientAsync to process container
     management events</description>
     <name>yarn.client.nodemanager-client-async.thread-pool-max-size</name>
@@ -2751,6 +2757,38 @@
     </description>
     <name>yarn.timeline-service.webapp.rest-csrf.methods-to-ignore</name>
     <value>GET,OPTIONS,HEAD</value>
+  </property>
+
+  <property>
+    <description>
+      Enable the XFS filter for YARN
+    </description>
+    <name>yarn.webapp.xfs-filter.enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>
+      Property specifying the xframe options value.
+    </description>
+    <name>yarn.resourcemanager.webapp.xfs-filter.xframe-options</name>
+    <value>SAMEORIGIN</value>
+  </property>
+
+  <property>
+    <description>
+      Property specifying the xframe options value.
+    </description>
+    <name>yarn.nodemanager.webapp.xfs-filter.xframe-options</name>
+    <value>SAMEORIGIN</value>
+  </property>
+
+  <property>
+    <description>
+      Property specifying the xframe options value.
+    </description>
+    <name>yarn.timeline-service.webapp.xfs-filter.xframe-options</name>
+    <value>SAMEORIGIN</value>
   </property>
 
   <property>
