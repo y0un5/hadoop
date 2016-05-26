@@ -70,6 +70,10 @@ public abstract class FSQueue implements Queue, Schedulable {
     this.metrics = FSQueueMetrics.forQueue(getName(), parent, true, scheduler.getConf());
     metrics.setMinShare(getMinShare());
     metrics.setMaxShare(getMaxShare());
+
+    AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
+    metrics.setMaxApps(allocConf.getQueueMaxApps(name));
+    metrics.setSchedulingPolicy(allocConf.getSchedulingPolicy(name).getName());
     this.parent = parent;
   }
   
@@ -304,6 +308,25 @@ public abstract class FSQueue implements Queue, Schedulable {
       return false;
     }
     return true;
+  }
+
+  /**
+   * Helper method to check if requested VCores are over maxResource.
+   * @param requestedVCores the number of VCores requested
+   * @return true if the number of VCores requested is over the maxResource;
+   *         false otherwise
+   */
+  protected boolean isVCoresOverMaxResource(int requestedVCores) {
+    if (requestedVCores >= scheduler.getAllocationConfiguration().
+        getMaxResources(getName()).getVirtualCores()) {
+      return true;
+    }
+
+    if (getParent() == null) {
+      return false;
+    }
+
+    return getParent().isVCoresOverMaxResource(requestedVCores);
   }
 
   /**

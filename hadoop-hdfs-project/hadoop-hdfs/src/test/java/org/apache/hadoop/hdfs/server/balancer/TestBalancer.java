@@ -495,7 +495,7 @@ public class TestBalancer {
     waitForHeartBeat(totalUsedSpace, totalCapacity, client, cluster);
 
     // start rebalancing
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
     int r = Balancer.run(namenodes, BalancerParameters.DEFAULT, conf);
     assertEquals(ExitStatus.NO_MOVE_PROGRESS.getExitCode(), r);
   }
@@ -579,7 +579,7 @@ public class TestBalancer {
       waitForHeartBeat(totalUsedSpace, totalCapacity, client, cluster);
 
       // start rebalancing
-      Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+      Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
       Balancer.run(namenodes, BalancerParameters.DEFAULT, conf);
       BlockPlacementPolicy placementPolicy =
           cluster.getNamesystem().getBlockManager().getBlockPlacementPolicy();
@@ -887,7 +887,7 @@ public class TestBalancer {
     waitForHeartBeat(totalUsedSpace, totalCapacity, client, cluster);
 
     // start rebalancing
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
     final int r = runBalancer(namenodes, p, conf);
     if (conf.getInt(DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY,
         DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_DEFAULT) ==0) {
@@ -1089,7 +1089,7 @@ public class TestBalancer {
         new String[]{RACK0}, null,new long[]{CAPACITY});
     cluster.triggerHeartbeats();
 
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
     Set<String>  datanodes = new HashSet<String>();
     datanodes.add(cluster.getDataNodes().get(0).getDatanodeId().getHostName());
     BalancerParameters.Builder pBuilder =
@@ -1554,7 +1554,7 @@ public class TestBalancer {
       null, null, storageCapacities, null, false, false, false, null);
 
     cluster.triggerHeartbeats();
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
 
     // Run Balancer
     final BalancerParameters p = BalancerParameters.DEFAULT;
@@ -1601,7 +1601,7 @@ public class TestBalancer {
     // Add another DN with the same capacity, cluster is now unbalanced
     cluster.startDataNodes(conf, 1, true, null, null);
     cluster.triggerHeartbeats();
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
 
     // Run balancer
     final BalancerParameters p = BalancerParameters.DEFAULT;
@@ -1680,7 +1680,7 @@ public class TestBalancer {
     cluster.triggerHeartbeats();
 
     BalancerParameters p = BalancerParameters.DEFAULT;
-    Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
     final int r = Balancer.run(namenodes, p, conf);
 
     // Replica in (DN0,SSD) was not moved to (DN1,SSD), because (DN1,DISK)
@@ -1798,7 +1798,7 @@ public class TestBalancer {
     LOG.info("lengths       = " + Arrays.toString(lengths) + ", #=" + lengths.length);
     waitForHeartBeat(totalUsed, 2*capacities[0]*capacities.length, client, cluster);
 
-    final Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
+    final Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
 
     { // run Balancer with min-block-size=50
       BalancerParameters.Builder b =
@@ -1924,7 +1924,6 @@ public class TestBalancer {
 
       // run balancer and validate results
       BalancerParameters p = BalancerParameters.DEFAULT;
-      Collection<URI> namenodes = DFSUtil.getNsServiceRpcUris(conf);
       runBalancer(conf, totalUsedSpace, totalCapacity, p, 0);
 
       // verify locations of striped blocks
