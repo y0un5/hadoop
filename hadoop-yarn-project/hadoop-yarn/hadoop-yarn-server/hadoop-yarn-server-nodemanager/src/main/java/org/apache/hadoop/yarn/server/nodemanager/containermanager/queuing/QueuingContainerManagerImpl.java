@@ -127,17 +127,19 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
             hasResourcesAvailable(allocatedContInfo.getPti())) {
       startAllocatedContainer(allocatedContInfo);
     } else {
-      this.context.getNMStateStore().storeContainer(containerTokenIdentifier
-          .getContainerID(), request);
-      this.context.getNMStateStore().storeContainerQueued(
-          containerTokenIdentifier.getContainerID());
-
+      ContainerId cIdToStart = containerTokenIdentifier.getContainerID();
+      this.context.getNMStateStore().storeContainer(cIdToStart, request);
+      this.context.getNMStateStore().storeContainerQueued(cIdToStart);
+      LOG.info("No available resources for container {} to start its execution "
+          + "immediately.", cIdToStart);
       if (allocatedContInfo.getExecutionType() == ExecutionType.GUARANTEED) {
         queuedGuaranteedContainers.add(allocatedContInfo);
         // Kill running opportunistic containers to make space for
         // guaranteed container.
         killOpportunisticContainers(allocatedContInfo);
       } else {
+        LOG.info("Opportunistic container {} will be queued at the NM.",
+            cIdToStart);
         queuedOpportunisticContainers.add(allocatedContInfo);
       }
     }
@@ -401,7 +403,6 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
     // Subtract the overall node resources.
     getContainersMonitor().subtractNodeResourcesFromResourceUtilization(
         resourceAllocationToFreeUp);
-
     return resourceAllocationToFreeUp;
   }
 
@@ -599,7 +600,7 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
 
     private ProcessTreeInfo createProcessTreeInfo(ContainerId containerId,
         Resource resource, Configuration conf) {
-      long pmemBytes = resource.getMemory() * 1024 * 1024L;
+      long pmemBytes = resource.getMemorySize() * 1024 * 1024L;
       float pmemRatio = conf.getFloat(YarnConfiguration.NM_VMEM_PMEM_RATIO,
           YarnConfiguration.DEFAULT_NM_VMEM_PMEM_RATIO);
       long vmemBytes = (long) (pmemRatio * pmemBytes);
