@@ -202,6 +202,25 @@ credentials in S3AFileSystem.
 For additional reading on the credential provider API see:
 [Credential Provider API](../../../hadoop-project-dist/hadoop-common/CredentialProviderAPI.html).
 
+#### Authenticating via environment variables
+
+S3A supports configuration via [the standard AWS environment variables](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html#cli-environment).
+
+The core environment variables are for the access key and associated secret:
+
+```
+export AWS_ACCESS_KEY_ID=my.aws.key
+export AWS_SECRET_ACCESS_KEY=my.secret.key
+```
+
+These environment variables can be used to set the authentication credentials
+instead of properties in the Hadoop configuration. *Important:* these
+environment variables are not propagated from client to server when
+YARN applications are launched. That is: having the AWS environment variables
+set when an application is launched will not permit the launched application
+to access S3 resources. The environment variables must (somehow) be set
+on the hosts/processes where the work is executed.
+
 ##### End to End Steps for Distcp and S3 with Credential Providers
 
 ###### provision
@@ -735,8 +754,18 @@ The exact number of operations to perform is configurable in the option
 Larger values generate more load, and are recommended when testing locally,
 or in batch runs.
 
-Smaller values should result in faster test runs, especially when the object
+Smaller values results in faster test runs, especially when the object
 store is a long way away.
+
+Operations which work on directories have a separate option: this controls
+the width and depth of tests creating recursive directories. Larger
+values create exponentially more directories, with consequent performance
+impact.
+
+      <property>
+        <name>scale.test.directory.count</name>
+        <value>2</value>
+      </property>
 
 DistCp tests targeting S3A support a configurable file size.  The default is
 10 MB, but the configuration value is expressed in KB so that it can be tuned
@@ -768,3 +797,25 @@ By default, the `parallel-tests` profile runs 4 test suites concurrently.  This
 can be tuned by passing the `testsThreadCount` argument.
 
     mvn -Pparallel-tests -DtestsThreadCount=8 clean test
+
+### Testing against non AWS S3 endpoints.
+
+The S3A filesystem is designed to work with storage endpoints which implement
+the S3 protocols to the extent that the amazon S3 SDK is capable of talking
+to it. We encourage testing against other filesystems and submissions of patches
+which address issues. In particular, we encourage testing of Hadoop release
+candidates, as these third-party endpoints get even less testing than the
+S3 endpoint itself.
+
+
+**Disabling the encryption tests**
+
+If the endpoint doesn't support server-side-encryption, these will fail
+
+      <property>
+        <name>test.fs.s3a.encryption.enabled</name>
+        <value>false</value>
+      </property>
+
+Encryption is only used for those specific test suites with `Encryption` in
+their classname.
