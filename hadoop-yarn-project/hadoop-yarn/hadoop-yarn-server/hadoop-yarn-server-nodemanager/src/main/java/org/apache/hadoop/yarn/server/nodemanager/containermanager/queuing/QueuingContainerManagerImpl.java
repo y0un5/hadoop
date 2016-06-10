@@ -160,6 +160,7 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
           containerTokenId.getExecutionType());
 
       if (foundInQueue) {
+        LOG.info("Removing queued container with ID " + containerID);
         this.context.getQueuingContext().getKilledQueuedContainers().put(
             containerTokenId,
             "Queued container request removed by ApplicationMaster.");
@@ -174,8 +175,9 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
       }
 
       nodeStatusUpdater.sendOutofBandHeartBeat();
+    } else {
+      super.stopContainerInternal(containerID);
     }
-    super.stopContainerInternal(containerID);
   }
 
   /**
@@ -455,6 +457,18 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
             ContainerExitStatus.INVALID, this.context.getQueuingContext()
                 .getQueuedContainers().get(containerID).getResource(),
             executionType);
+      } else {
+        // Check if part of the stopped/killed queued containers.
+        for (ContainerTokenIdentifier cTokenId : this.context
+            .getQueuingContext().getKilledQueuedContainers().keySet()) {
+          if (cTokenId.getContainerID().equals(containerID)) {
+            return BuilderUtils.newContainerStatus(containerID,
+                org.apache.hadoop.yarn.api.records.ContainerState.COMPLETE,
+                this.context.getQueuingContext().getKilledQueuedContainers()
+                    .get(cTokenId), ContainerExitStatus.ABORTED, cTokenId
+                        .getResource(), cTokenId.getExecutionType());
+          }
+        }
       }
     }
     return super.getContainerStatusInternal(containerID, nmTokenIdentifier);
@@ -500,6 +514,16 @@ public class QueuingContainerManagerImpl extends ContainerManagerImpl {
   @VisibleForTesting
   public int getNumAllocatedOpportunisticContainers() {
     return allocatedOpportunisticContainers.size();
+  }
+
+  @VisibleForTesting
+  public int getNumQueuedGuaranteedContainers() {
+    return queuedGuaranteedContainers.size();
+  }
+
+  @VisibleForTesting
+  public int getNumQueuedOpportunisticContainers() {
+    return queuedOpportunisticContainers.size();
   }
 
   class QueuingApplicationEventDispatcher implements
