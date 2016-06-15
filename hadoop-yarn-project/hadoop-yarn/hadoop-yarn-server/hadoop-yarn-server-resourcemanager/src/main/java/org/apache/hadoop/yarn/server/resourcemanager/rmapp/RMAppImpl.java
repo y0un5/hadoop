@@ -543,6 +543,10 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
+  /**
+   * Starts the application level timeline collector for this app. This should
+   * be used only if the timeline service v.2 is enabled.
+   */
   public void startTimelineCollector() {
     AppLevelTimelineCollector collector =
         new AppLevelTimelineCollector(applicationId);
@@ -550,6 +554,10 @@ public class RMAppImpl implements RMApp, Recoverable {
         applicationId, collector);
   }
 
+  /**
+   * Stops the application level timeline collector for this app. This should be
+   * used only if the timeline service v.2 is enabled.
+   */
   public void stopTimelineCollector() {
     rmContext.getRMTimelineCollectorManager().remove(applicationId);
   }
