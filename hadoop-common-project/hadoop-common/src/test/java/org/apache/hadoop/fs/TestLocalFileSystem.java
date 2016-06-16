@@ -636,4 +636,23 @@ public class TestLocalFileSystem {
     FileStatus[] stats = fs.listStatus(path);
     assertTrue(stats != null && stats.length == 1 && stats[0] == stat);
   }
+
+  @Test
+  public void testRenameCrc() throws Exception {
+    Path oldPath = new Path(TEST_ROOT_DIR, "old");
+    Path oldCrcPath = new Path(TEST_ROOT_DIR, ".old.crc");
+    Path newPath = new Path(TEST_ROOT_DIR, "new");
+    Path newCrcPath = new Path(TEST_ROOT_DIR, ".new.crc");
+
+    Assert.assertFalse(exists(fileSys, oldPath));
+    Assert.assertFalse(exists(fileSys, oldCrcPath));
+
+    createFile(fileSys, oldPath);
+    Assert.assertTrue(exists(fileSys, oldPath));
+    Assert.assertTrue(exists(fileSys, oldCrcPath));
+
+    fileSys.rename(oldPath, newPath);
+    Assert.assertTrue(!exists(fileSys, oldPath) && exists(fileSys, newPath));
+    Assert.assertTrue(!exists(fileSys, oldCrcPath) && exists(fileSys, newCrcPath));
+  }
 }

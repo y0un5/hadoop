@@ -57,7 +57,26 @@ public class TestFileContextDeleteOnExit {
       Assert.assertTrue(set.contains(path));
     }
   }
-  
+
+  @Test
+  public void testRenameCrc() throws Exception {
+    Path oldPath = helper.getTestRootPath(fc, "old");
+    Path oldCrcPath = helper.getTestRootPath(fc, ".old.crc");
+    Path newPath = helper.getTestRootPath(fc, "new");
+    Path newCrcPath = helper.getTestRootPath(fc, ".new.crc");
+
+    Assert.assertFalse(exists(fc, oldPath));
+    Assert.assertFalse(exists(fc, oldCrcPath));
+
+    createFile(fc, oldPath);
+    Assert.assertTrue(exists(fc, oldPath));
+    Assert.assertTrue(exists(fc, oldCrcPath));
+
+    fc.rename(oldPath, newPath);
+    Assert.assertTrue(!exists(fc, oldPath) && exists(fc, newPath));
+    Assert.assertTrue(!exists(fc, oldCrcPath) && exists(fc, newCrcPath)); // FAILURE!
+  }
+
   @Test
   public void testDeleteOnExit() throws Exception {
     // Create deleteOnExit entries
